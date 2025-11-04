@@ -75,42 +75,121 @@ window.addEventListener('DOMContentLoaded', function () {
       });
     });
 
-    // --- CARGAR PISTA ---
-    BABYLON.SceneLoader.ImportMesh("", "./assets/models/pistaCarreras/", "pista_carreras.glb", scene,
-      function (meshes) {
-        meshes.forEach(mesh => {
-          if (mesh.name.startsWith("car_") || mesh.name.startsWith("tire_")) {
-            mesh.dispose();
-          } else if (mesh.name !== "__root__") {
-            mesh.checkCollisions = true;
-            if (mesh.material) {
-              mesh.material.diffuseColor = new BABYLON.Color3(0.12, 0.12, 0.18);
-              mesh.material.emissiveColor = new BABYLON.Color3(0.05, 0.05, 0.1);
-            }
+// --- CARGAR PISTA PRIMERO ---
+let trackPath = [];
+
+const loadTrack = new Promise((resolve) => {
+  BABYLON.SceneLoader.ImportMesh("", "./assets/models/pistaCarreras/", "pista_carreras.glb", scene,
+    function (meshes, particleSystems, skeletons, animationGroups) {
+      
+      console.log("=== EXTRACCIÓN DE TRAYECTORIA ===");
+      
+      // EXTRAER la trayectoria de "car_1"
+      if (animationGroups && animationGroups.length > 0) {
+        const mainAnim = animationGroups.find(ag => ag.name === "Main");
+        
+        if (mainAnim) {
+          console.log("Animation Group 'Main' encontrado");
+          
+          // Buscar la animación de posición de car_1
+          const carPosAnim = mainAnim.targetedAnimations.find(ta => 
+            ta.target.name === "car_1" && ta.animation.targetProperty === "position"
+          );
+          
+          if (carPosAnim) {
+            const keys = carPosAnim.animation.getKeys();
+            trackPath = keys.map(key => ({
+              frame: key.frame,
+              value: key.value.clone()
+            }));
+            
+            console.log("✓ Trayectoria extraída:", trackPath.length, "keyframes");
+            console.log("  Primer punto:", trackPath[0].value.toString());
+            console.log("  Último punto:", trackPath[trackPath.length - 1].value.toString());
+          } else {
+            console.warn("No se encontró animación de posición para car_1");
           }
-        });
-        console.log("Pista cargada.");
+          
+          // Detener y eliminar las animaciones
+          mainAnim.stop();
+          mainAnim.dispose();
+        }
       }
-    );
+      
+      // Eliminar los carros y llantas
+      const toDelete = [];
+      meshes.forEach(mesh => {
+        if (mesh.name.startsWith("car_") || mesh.name.startsWith("tire_")) {
+          toDelete.push(mesh);
+        } else if (mesh.name !== "__root__") {
+          mesh.checkCollisions = true;
+          if (mesh.material) {
+            mesh.material.diffuseColor = new BABYLON.Color3(0.12, 0.12, 0.18);
+            mesh.material.emissiveColor = new BABYLON.Color3(0.05, 0.05, 0.1);
+          }
+        }
+      });
+      
+      // Eliminar carros
+      toDelete.forEach(mesh => mesh.dispose());
+      console.log("Eliminados", toDelete.length, "meshes de carros");
+      console.log("Pista cargada.");
+      
+      resolve(); // Señalar que terminó de cargar
+    }
+  );
+});
 
     // --- CARGAR JINETE ---
-    BABYLON.SceneLoader.ImportMesh("", "./assets/models/jineteCerdo/", "jinete.glb", scene,
-      function (meshes) {
-        player = meshes[0];
-        player.name = "jineteCerdo";
-        player.position = new BABYLON.Vector3(0,5, -70);
-        player.scaling = new BABYLON.Vector3(10, 10, 10);
-        player.rotation = new BABYLON.Vector3(0, BABYLON.Tools.ToRadians(120), 0); 
-        player.checkCollisions = true;
+    // --- CARGAR JINETE ---
+// --- CARGAR JINETE DESPUÉS DE LA PISTA ---
+loadTrack.then(() => {
+  console.log("Ahora cargando jinete con trayectoria disponible...");
+  
+  BABYLON.SceneLoader.ImportMesh("", "./assets/models/jineteCerdo/", "jinete.glb", scene,
+    function (meshes) {
+      player = meshes[0];
+      player.name = "jineteCerdo";
+      player.scaling = new BABYLON.Vector3(10, 10, 10);
+      player.checkCollisions = true;
 
-        player.getChildMeshes().forEach(m => {
-          if (m.material) {
-            m.material.emissiveColor = new BABYLON.Color3(0.08, 0.08, 0.12);
-            m.material.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.15);
-          }
-        });
+      player.getChildMeshes().forEach(m => {
+        if (m.material) {
+          m.material.emissiveColor = new BABYLON.Color3(0.08, 0.08, 0.12);
+          m.material.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.15);
+        }
+      });
 
-        // --- MOVIMIENTO AUTOMÁTICO ---
+      // APLICAR la trayectoria extraída del circuito
+      if (trackPath.length > 0) {
+        console.log("✓ Aplicando trayectoria del circuito al jinete...");
+        
+        const animation = new BABYLON.Animation(
+          "moveAlongTrack",
+          "position",
+          30,
+          BABYLON.Animation.ANIMATIONTYPE_VECTOR3,
+          BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE
+        );
+
+        // Ajustar altura Y de cada punto (+15 para elevarlo sobre la pista)
+        const adjustedPath = trackPath.map(point => ({
+          frame: point.frame,
+          value: new BABYLON.Vector3(point.value.x, point.value.y + 15, point.value.z)
+        }));
+
+        animation.setKeys(adjustedPath);
+        player.animations = [animation];
+        
+        // Animar desde frame 0 hasta 300
+        const lastFrame = trackPath[trackPath.length - 1].frame;
+        scene.beginAnimation(player, 0, lastFrame, true);
+        
+        console.log("✓ Animación aplicada:", trackPath.length, "keyframes, hasta frame:", lastFrame);
+      } else {
+        console.warn("⚠ No se extrajo trayectoria, usando animación circular");
+        
+        // FALLBACK: animación circular
         const animation = new BABYLON.Animation(
           "moveAroundTrack",
           "position",
@@ -126,26 +205,29 @@ window.addEventListener('DOMContentLoaded', function () {
           const angle = BABYLON.Tools.ToRadians(t);
           const x = Math.cos(angle) * pathRadius;
           const z = Math.sin(angle) * (pathRadius * 0.7);
-          const y = 20 + Math.sin(angle * 2) * 0.5;
+          const y = 15 + Math.sin(angle * 2) * 0.5;
           path.push({ frame: t, value: new BABYLON.Vector3(x, y, z) });
         }
 
         animation.setKeys(path);
-        player.animations.push(animation);
+        player.animations = [animation];
         scene.beginAnimation(player, 0, 360, true);
-
-        scene.onBeforeRenderObservable.add(() => {
-          const pos = player.position;
-          player.rotation.y = Math.atan2(pos.x, pos.z);
-        });
-
-        console.log("Jinete cargado y en movimiento automático.");
-      },
-      null,
-      function (scene, message, exception) {
-        console.error("Error al cargar el Jinete:", message, exception);
       }
-    );
+
+      // Rotación para que mire hacia donde va
+      scene.onBeforeRenderObservable.add(() => {
+        const pos = player.position;
+        player.rotation.y = Math.atan2(pos.x, pos.z);
+      });
+
+      console.log("✓ Jinete cargado y animado.");
+    },
+    null,
+    function (scene, message, exception) {
+      console.error("Error al cargar el Jinete:", message, exception);
+    }
+  );
+});
 
     // --- SUELO INVISIBLE ---
     const ground = BABYLON.MeshBuilder.CreateGround("ground", { width: 500, height: 500 }, scene);
