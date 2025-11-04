@@ -1,4 +1,4 @@
-// app.js - escena de ejemplo que carga texturas locales desde public/assets/textures
+// app.js
 window.addEventListener('DOMContentLoaded', function () {
   const canvas = document.getElementById('renderCanvas');
   const engine = new BABYLON.Engine(canvas, true);
@@ -6,75 +6,91 @@ window.addEventListener('DOMContentLoaded', function () {
   const createScene = function () {
     var scene = new BABYLON.Scene(engine);
 
-    var camera = new BABYLON.FreeCamera('camera1', new BABYLON.Vector3(0, 5, -15), scene);
+    // --- CAMBIO 1: Activar Gravedad y Colisiones en la Escena ---
+    // Esto hará que la cámara "caiga" si no hay suelo.
+    scene.gravity = new BABYLON.Vector3(0, -0.9, 0); // Ajusta -0.9 a la fuerza de gravedad que quieras
+    scene.collisionsEnabled = true;
+
+    // --- CAMBIO 2: Cambiar a FreeCamera ---
+    // Esta cámara se mueve con WASD y mira con el ratón.
+    // La ponemos en (0, 5, -15) para que empiece en el suelo, mirando la pista.
+    // Empezamos desde 15 unidades de altura para asegurar que caiga sobre la pista
+var camera = new BABYLON.FreeCamera('camera1', new BABYLON.Vector3(0, 200, -15), scene);
     camera.setTarget(BABYLON.Vector3.Zero());
     camera.attachControl(canvas, true);
+
+    // --- CAMBIO 3: Configurar la Cámara para Colisiones ---
+    camera.checkCollisions = true;  // Activa colisiones para la cámara
+    camera.applyGravity = false;     // Hace que la gravedad afecte a la cámara
+
+    // Definimos el "cuerpo" del jugador (un elipsoide) para colisionar.
+    // Esto es como la 'hitbox' del jugador: 2 unidades de alto, 0.5 de radio.
+    camera.ellipsoid = new BABYLON.Vector3(0.5, 1, 0.5);
 
     var light = new BABYLON.HemisphericLight('light', new BABYLON.Vector3(0, 1, 0), scene);
     light.intensity = 0.9;
 
-    // Rutas locales (coloca tus texturas en public/assets/textures/)
-    const base = 'assets/textures/';
-
-    var woodMat = new BABYLON.StandardMaterial('woodMat', scene);
-    woodMat.diffuseTexture = new BABYLON.Texture(base + 'wood.jpg', scene);
-
-    var box = BABYLON.MeshBuilder.CreateBox('box', { size: 2 }, scene);
-    box.position = new BABYLON.Vector3(-4, 1, 0);
-    box.material = woodMat;
-
-    var marbleMat = new BABYLON.StandardMaterial('marbleMat', scene);
-    marbleMat.diffuseTexture = new BABYLON.Texture(base + 'marble.jpg', scene);
-
-    var sphere = BABYLON.MeshBuilder.CreateSphere('sphere', { diameter: 2 }, scene);
-    sphere.position = new BABYLON.Vector3(-1.5, 1, 0);
-    sphere.material = marbleMat;
-
-    var metalMat = new BABYLON.StandardMaterial('metalMat', scene);
-    metalMat.diffuseTexture = new BABYLON.Texture(base + 'metal.jpg', scene);
-
-    var cylinder = BABYLON.MeshBuilder.CreateCylinder('cylinder', { height: 2, diameter: 1.5 }, scene);
-    cylinder.position = new BABYLON.Vector3(1.5, 1, 0);
-    cylinder.material = metalMat;
-
-    var brickMat = new BABYLON.StandardMaterial('brickMat', scene);
-    brickMat.diffuseTexture = new BABYLON.Texture(base + 'brick.jpg', scene);
-
-    var torus = BABYLON.MeshBuilder.CreateTorus('torus', { diameter: 2, thickness: 0.5 }, scene);
-    torus.position = new BABYLON.Vector3(4, 1, 0);
-    torus.material = brickMat;
-
-    var groundMat = new BABYLON.StandardMaterial('groundMat', scene);
-    groundMat.diffuseTexture = new BABYLON.Texture(base + 'grass.jpg', scene);
-
-    var ground = BABYLON.MeshBuilder.CreateGround('ground', { width: 12, height: 12 }, scene);
-    ground.material = groundMat;
-
-    // Cargar modelo del Yeti (glTF)
+    // --- CARGAR LA PISTA DE CARRERAS (GLB) ---
     BABYLON.SceneLoader.ImportMesh(
       '',
-      './assets/models/',
-      'Yeti.gltf',
+      './assets/models/pistaCarreras/', // Ruta a la carpeta
+      'pista_carreras.glb',             // Nombre del archivo .glb
       scene,
-      function (meshes) {
-        // Ajustar posición y escala del yeti
+      function (meshes, particleSystems, skeletons, animationGroups) {
+        
+        // Detener animaciones (como antes)
+        if (animationGroups && animationGroups.length > 0) {
+          animationGroups.forEach(animGroup => animGroup.stop());
+        }
+        
+        // --- CAMBIO: Lógica para eliminar coches ---
+        console.log("Revisando mallas para eliminar coches...");
+        
+        meshes.forEach(function(mesh) {
+          
+          // Comprueba si el nombre de la malla comienza con "car_" o "tire_"
+          if (mesh.name.startsWith("car_") || mesh.name.startsWith("tire_")) {
+            
+            console.log("Quitando malla de coche: " + mesh.name);
+            mesh.dispose(); // <-- ESTO LOS ELIMINA
+
+          } else {
+            
+            // Si NO es un coche, activa sus colisiones (para la pista, etc.)
+            // No actives colisiones en el "__root__" (causa problemas)
+            if (mesh.name !== "__root__") {
+               mesh.checkCollisions = true;
+            }
+
+          }
+        });
+
         if (meshes.length > 0) {
-          const yeti = meshes[0];
-          yeti.position = new BABYLON.Vector3(0, 0, 3);
-          yeti.scaling = new BABYLON.Vector3(0.5, 0.5, 0.5); // Ajusta según tamaño
-          console.log('Yeti cargado exitosamente:', meshes);
+          const pista = meshes[0];
+          pista.position = BABYLON.Vector3.Zero();
+          console.log('Pista cargada exitosamente.');
+
+          // --- CAMBIO 4: Activar Colisiones en el Modelo ---
+          // Recorremos todas las mallas cargadas del GLB
+          // y les decimos que participen en las colisiones.
+          meshes.forEach(function(mesh) {
+            mesh.checkCollisions = true;
+          });
         }
       },
-      function (event) {
-        // Progreso de carga
-        if (event.lengthComputable) {
-          console.log('Cargando Yeti: ' + (event.loaded * 100 / event.total).toFixed(0) + '%');
-        }
-      },
+      null, // Callback de progreso
       function (scene, message, exception) {
-        console.error('Error al cargar el modelo del Yeti:', message, exception);
+        console.error('Error al cargar la pista:', message, exception);
       }
     );
+    
+    // --- CAMBIO 5: (Recomendado) Añadir un suelo de colisión ---
+    // Es bueno tener un suelo grande por si te sales de la pista.
+    // Lo hacemos invisible (isVisible = false) pero con colisiones.
+    var ground = BABYLON.MeshBuilder.CreateGround('ground', { width: 500, height: 500 }, scene);
+    ground.position.y = -0.1; // Justo debajo de la pista
+    ground.checkCollisions = true;
+    ground.isVisible = false; // No queremos verlo, solo colisionar con él
 
     return scene;
   };
