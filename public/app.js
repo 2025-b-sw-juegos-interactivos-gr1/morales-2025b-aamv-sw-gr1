@@ -153,6 +153,16 @@ loadTrack.then(() => {
       player.scaling = new BABYLON.Vector3(10, 10, 10);
       player.checkCollisions = true;
 
+      // USAR LA POSICIÓN INICIAL DEL CARRO
+      if (trackPath.length > 0) {
+        const startPos = trackPath[75].value;
+        player.position = new BABYLON.Vector3(startPos.x, startPos.y + 25, startPos.z);
+        console.log("Posición inicial del jinete:", player.position.toString());
+      } else {
+        // Fallback si no hay trayectoria
+        player.position = new BABYLON.Vector3(0,25, -70);
+      }
+
       player.getChildMeshes().forEach(m => {
         if (m.material) {
           m.material.emissiveColor = new BABYLON.Color3(0.08, 0.08, 0.12);
@@ -172,59 +182,28 @@ loadTrack.then(() => {
           BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE
         );
 
-        // Ajustar altura Y de cada punto (+15 para elevarlo sobre la pista)
+        // Ajustar altura Y de cada punto
         const adjustedPath = trackPath.map(point => ({
           frame: point.frame,
-          value: new BABYLON.Vector3(point.value.x, point.value.y + 15, point.value.z)
+          value: new BABYLON.Vector3(point.value.x+65, point.value.y + 25, point.value.z)
         }));
 
         animation.setKeys(adjustedPath);
         player.animations = [animation];
         
-        // Animar desde frame 0 hasta 300
         const lastFrame = trackPath[trackPath.length - 1].frame;
-        scene.beginAnimation(player, 0, lastFrame, true);
+        scene.beginAnimation(player, 0, lastFrame, true, 0.5);
         
         console.log("✓ Animación aplicada:", trackPath.length, "keyframes, hasta frame:", lastFrame);
-      } else {
-        console.warn("⚠ No se extrajo trayectoria, usando animación circular");
-        
-        // FALLBACK: animación circular
-        const animation = new BABYLON.Animation(
-          "moveAroundTrack",
-          "position",
-          30,
-          BABYLON.Animation.ANIMATIONTYPE_VECTOR3,
-          BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE
-        );
-
-        const pathRadius = 120;
-        const path = [];
-
-        for (let t = 0; t <= 360; t += 5) {
-          const angle = BABYLON.Tools.ToRadians(t);
-          const x = Math.cos(angle) * pathRadius;
-          const z = Math.sin(angle) * (pathRadius * 0.7);
-          const y = 15 + Math.sin(angle * 2) * 0.5;
-          path.push({ frame: t, value: new BABYLON.Vector3(x, y, z) });
-        }
-
-        animation.setKeys(path);
-        player.animations = [animation];
-        scene.beginAnimation(player, 0, 360, true);
       }
 
-      // Rotación para que mire hacia donde va
+      // Rotación
       scene.onBeforeRenderObservable.add(() => {
         const pos = player.position;
         player.rotation.y = Math.atan2(pos.x, pos.z);
       });
 
       console.log("✓ Jinete cargado y animado.");
-    },
-    null,
-    function (scene, message, exception) {
-      console.error("Error al cargar el Jinete:", message, exception);
     }
   );
 });
