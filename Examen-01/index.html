@@ -73,6 +73,27 @@
         taxi.position = new BABYLON.Vector3(0, 2, 0); // Altura inicial (levitando)
         taxi.scaling = new BABYLON.Vector3(1, 1, 1); // Ajusta la escala si es necesario
 
+        // --- NUEVO: CREAR EL HAZ DE LUZ ---
+        // Creamos un cilindro cónico (tapered) para el haz de luz
+        const hazLuz = BABYLON.MeshBuilder.CreateCylinder("hazLuz", {
+            height: 5, // Altura del haz, debe ser largo
+            diameterTop: 0.5, // Diámetro pequeño arriba (origen en el taxi)
+            diameterBottom: 10, // Diámetro ancho abajo (área de abducción)
+            tessellation: 16 // Suavidad del cono
+        }, scene);
+        
+        // Material del haz de luz: Blanco brillante y transparente
+        const materialHaz = new BABYLON.StandardMaterial("matHaz", scene);
+        materialHaz.diffuseColor = new BABYLON.Color3(1, 1, 1); // Blanco puro
+        materialHaz.emissiveColor = new BABYLON.Color3(1, 1, 1); // Brillo blanco intenso
+        materialHaz.alpha = 0.4; // Semitransparente
+        hazLuz.material = materialHaz;
+        
+        // Configuración inicial del haz
+        hazLuz.parent = taxi; // El haz es hijo del taxi para seguirlo
+        hazLuz.position = new BABYLON.Vector3(0, -3, 0); // Lo colocamos debajo del taxi
+        hazLuz.isVisible = false; // OCULTO por defecto, solo aparece al abducir
+        // -----------------------------------
         // Hacemos que la cámara sea "hija" del taxi para que lo siga a todas partes
         camera.parent = taxi;
 
@@ -179,12 +200,15 @@
                         paquete.parent = taxi;
                         paquete.position = new BABYLON.Vector3(0, -1.5, 0);
                         console.log("¡Paquete Abducido!");
+                        hazLuz.isVisible = true;
+                        
                     }
                     else if (tienePaquete && distZona < 6) {
                         tienePaquete = false;
                         paquete.parent = null;
                         // Soltar el paquete en el suelo
                         paquete.position = new BABYLON.Vector3(taxi.position.x, 0.5, taxi.position.z);
+                        hazLuz.isVisible = false;
                         console.log("¡Paquete Entregado!");
                     }
                 }
