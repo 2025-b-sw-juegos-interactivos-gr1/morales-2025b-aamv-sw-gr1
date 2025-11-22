@@ -69,7 +69,7 @@
           scene
         );
         const taxi = importTaxi.meshes[0];
-        //taxi.rotationQuaternion = null;
+        taxi.rotationQuaternion = null;
         taxi.position = new BABYLON.Vector3(0, 2, 0); // Altura inicial (levitando)
         taxi.scaling = new BABYLON.Vector3(1, 1, 1); // Ajusta la escala si es necesario
 
@@ -136,68 +136,59 @@
         const velocidad = 0.2;
 
         scene.onBeforeRenderObservable.add(() => {
-          // A. Movimiento del Taxi (WASD)
-          if (inputMap["w"]) {
-            taxi.position.z -= velocidad;
-            taxi.rotation.y = BABYLON.Tools.ToRadians(180);
-          }
-          if (inputMap["s"]) {
-            taxi.position.z += velocidad;
-            taxi.rotation.y = BABYLON.Tools.ToRadians(0);
-          }
-          if (inputMap["a"]) {
-            taxi.position.x += velocidad;
-            taxi.rotation.y = BABYLON.Tools.ToRadians(-90);
-          }
-          if (inputMap["d"]) {
-            taxi.position.x -= velocidad;
-            taxi.rotation.y = BABYLON.Tools.ToRadians(90);
-          }
+                
+                // --- 1. LOGICA DE GIRO CON MOUSE ---
+                // Si la cámara giró (porque moviste el mouse), le pasamos ese giro al taxi
+                if (camera.rotation.y !== 0) {
+                    taxi.rotation.y += camera.rotation.y;
+                    camera.rotation.y = 0; // Reseteamos la cámara para que siempre quede detrás del taxi
+                }
 
-          // B. Lógica de Recoger y Dejar (Espacio)
-          if (inputMap[" "]) {
-            // Barra espaciadora
+                // --- 2. MOVIMIENTO (Relativo a donde mira el taxi) ---
+                // Usamos 'translate' con Space.LOCAL para movernos hacia el frente del modelo
+                
+                // ADELANTE (W)
+                if (inputMap["w"]) {
+                    // Movemos en el eje Z (frente) localmente
+                    taxi.translate(BABYLON.Axis.Z, velocidad, BABYLON.Space.LOCAL);
+                }
 
-            // Calcular distancia (Requisito: Vector3.Distance)
-            // Nota: usamos positionAbsolute si el paquete ya es hijo, pero para simplificar usamos position
-            const distPaquete = BABYLON.Vector3.Distance(
-              taxi.position,
-              paquete.position
-            );
-            const distZona = BABYLON.Vector3.Distance(
-              taxi.position,
-              zonaEntrega.position
-            );
+                // ATRÁS (S)
+                if (inputMap["s"]) {
+                    // Movemos en Z negativo
+                    taxi.translate(BABYLON.Axis.Z, -velocidad, BABYLON.Space.LOCAL);
+                }
 
-            // RECOGER (Abducir)
-            if (!tienePaquete && distPaquete < 3) {
-              tienePaquete = true;
+                // DESPLAZAMIENTO LATERAL (A y D) - Opcional
+                // Esto hará que el taxi se deslice a los lados sin girar (Strafing)
+                if (inputMap["a"]) {
+                    taxi.translate(BABYLON.Axis.X, -velocidad, BABYLON.Space.LOCAL);
+                }
+                if (inputMap["d"]) {
+                    taxi.translate(BABYLON.Axis.X, velocidad, BABYLON.Space.LOCAL);
+                }
 
-              // Requisito: Parenting (Emparentamiento)
-              paquete.parent = taxi;
+                // --- 3. LÓGICA DE PAQUETE (Igual que antes) ---
+                // Nota: Como ahora nos movemos libremente, el cálculo de distancia sigue funcionando igual
+                if (inputMap[" "]) { 
+                    const distPaquete = BABYLON.Vector3.Distance(taxi.position, paquete.position); 
+                    const distZona = BABYLON.Vector3.Distance(taxi.position, zonaEntrega.position);
 
-              // Ajuste visual: lo ponemos debajo del taxi (levitación)
-              paquete.position = new BABYLON.Vector3(0, -1.5, 0);
-              console.log("¡Paquete Abducido!");
-            }
-
-            // DEJAR (Entregar)
-            else if (tienePaquete && distZona < 5) {
-              tienePaquete = false;
-
-              // Requisito: Romper parentesco
-              paquete.parent = null;
-
-              // Lo dejamos en el suelo de la zona
-              paquete.position = new BABYLON.Vector3(
-                zonaEntrega.position.x,
-                0.5,
-                zonaEntrega.position.z
-              );
-              console.log("¡Paquete Entregado!");
-            }
-          }
-        });
+                    if (!tienePaquete && distPaquete < 4) { // Aumenté un poco el rango para facilitar
+                        tienePaquete = true;
+                        paquete.parent = taxi;
+                        paquete.position = new BABYLON.Vector3(0, -1.5, 0);
+                        console.log("¡Paquete Abducido!");
+                    }
+                    else if (tienePaquete && distZona < 6) {
+                        tienePaquete = false;
+                        paquete.parent = null;
+                        // Soltar el paquete en el suelo
+                        paquete.position = new BABYLON.Vector3(taxi.position.x, 0.5, taxi.position.z);
+                        console.log("¡Paquete Entregado!");
+                    }
+                }
+            });
 
         return scene;
       };
