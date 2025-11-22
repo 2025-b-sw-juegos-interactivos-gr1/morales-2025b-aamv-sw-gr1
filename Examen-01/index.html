@@ -87,20 +87,33 @@
         paquete.scaling = new BABYLON.Vector3(2.5, 2.5, 2.5);
         paquete.position = new BABYLON.Vector3(5, 0.9, -6); // Zona de recogida
 
-        // --- 3. ZONA DE ENTREGA (Requisito: MeshBuilder y StandardMaterial) ---
+        // --- 3. ZONA DE ENTREGA (MEJORADA: Baliza Holográfica) ---
 
-        // Usamos MeshBuilder como pide la guía para crear la zona visualmente
+        // Creamos un cilindro alto para que parezca un rayo de luz
         const zonaEntrega = BABYLON.MeshBuilder.CreateCylinder(
           "zonaEntrega",
-          { diameter: 5, height: 0.1 },
+          { diameter: 5, height: 10 }, // Height 10 para que sea alto
           scene
         );
-        zonaEntrega.position = new BABYLON.Vector3(-15, 0, -10);
+        
+        // Posición: Lo subimos un poco (y=5) porque el cilindro se crea desde su centro
+        zonaEntrega.position = new BABYLON.Vector3(15, 5, -137.2);
 
         const materialZona = new BABYLON.StandardMaterial("matZona", scene);
-        materialZona.diffuseColor = new BABYLON.Color3(0, 1, 0); // Verde
-        materialZona.alpha = 0.5; // Transparente
+        materialZona.diffuseColor = new BABYLON.Color3(0, 1, 0); // Verde base
+        materialZona.emissiveColor = new BABYLON.Color3(0.2, 1, 0.2); // Verde Neón (Brillo)
+        materialZona.alpha = 0.3; // Muy transparente, como un holograma
         zonaEntrega.material = materialZona;
+
+        // --- ANIMACIÓN DE LA ZONA (Para llamar la atención) ---
+        scene.registerBeforeRender(() => {
+            // Hacemos que la zona gire sobre su eje
+            zonaEntrega.rotation.y += 0.02;
+            
+            // Efecto de "respiración" (hacerla parpadear suavemente)
+            // Usamos seno del tiempo para subir y bajar la transparencia
+            materialZona.alpha = 0.3 + Math.sin(Date.now() / 500) * 0.1;
+        });
 
         // --- 4. MANEJO DE INPUT (Requisito: onKeyboardObservable) ---
 
@@ -201,4 +214,4 @@
     </script>
   </body>
 </html>
-wwwwww
+
