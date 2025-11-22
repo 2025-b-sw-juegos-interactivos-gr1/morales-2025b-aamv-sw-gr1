@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Examen: Taxi del Futuro</title>
+    <style>
+      html,
+      body {
+        overflow: hidden;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+      }
+      #renderCanvas {
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+      }
+    </style>
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+  </head>
+  <body>
+    <canvas id="renderCanvas"></canvas>
+    <script>
+      const canvas = document.getElementById("renderCanvas");
+      const engine = new BABYLON.Engine(canvas, true);
+
+      const createScene = async function () {
+        const scene = new BABYLON.Scene(engine);
+
+        // --- 1. CÁMARA Y LUZ ---
+        // Creamos la cámara, PERO AÚN NO LA EMPARENTAMOS AL TAXI
+        const camera = new BABYLON.FreeCamera(
+          "camera1",
+          new BABYLON.Vector3(0, 5, -10),
+          scene
+        );
+        camera.setTarget(BABYLON.Vector3.Zero());
+
+        // Configuración del Mouse
+        camera.attachControl(canvas, true);
+        camera.inputs.remove(camera.inputs.attached.keyboard); // Desactivamos WASD de la cámara
+        camera.angularSensibility = 2000;
+
+        const light = new BABYLON.HemisphericLight(
+          "light",
+          new BABYLON.Vector3(0, 1, 0),
+          scene
+        );
+        light.intensity = 0.7;
+
+        // --- 2. CARGA DE TUS MODELOS ---
+
+        // A. El Vecindario
+        const importVecindario = await BABYLON.SceneLoader.ImportMeshAsync(
+          "",
+          "./models/",
+          "vecindario.glb",
+          scene
+        );
+
+        // B. El Taxi (Jugador)
+        const importTaxi = await BABYLON.SceneLoader.ImportMeshAsync(
+          "",
+          "./models/",
+          "taxi.glb",
+          scene
+        );
+        const taxi = importTaxi.meshes[0];
+        //taxi.rotationQuaternion = null;
+        taxi.position = new BABYLON.Vector3(0, 2, 0); // Altura inicial (levitando)
+        taxi.scaling = new BABYLON.Vector3(1, 1, 1); // Ajusta la escala si es necesario
+
+        // Hacemos que la cámara sea "hija" del taxi para que lo siga a todas partes
+        camera.parent = taxi;
+
+        // C. El Paquete
+        const importPaquete = await BABYLON.SceneLoader.ImportMeshAsync(
+          "",
+          "./models/",
+          "paquete.glb",
+          scene
+        );
+        const paquete = importPaquete.meshes[0];
+        paquete.scaling = new BABYLON.Vector3(2.5, 2.5, 2.5);
+        paquete.position = new BABYLON.Vector3(5, 0.9, -6); // Zona de recogida
+
+        // --- 3. ZONA DE ENTREGA (Requisito: MeshBuilder y StandardMaterial) ---
+
+        // Usamos MeshBuilder como pide la guía para crear la zona visualmente
+        const zonaEntrega = BABYLON.MeshBuilder.CreateCylinder(
+          "zonaEntrega",
+          { diameter: 5, height: 0.1 },
+          scene
+        );
+        zonaEntrega.position = new BABYLON.Vector3(-15, 0, -10);
+
+        const materialZona = new BABYLON.StandardMaterial("matZona", scene);
+        materialZona.diffuseColor = new BABYLON.Color3(0, 1, 0); // Verde
+        materialZona.alpha = 0.5; // Transparente
+        zonaEntrega.material = materialZona;
+
+        // --- 4. MANEJO DE INPUT (Requisito: onKeyboardObservable) ---
+
+        let inputMap = {};
+        // Esta es la forma "moderna" que pide tu profesor
+        scene.onKeyboardObservable.add((kbInfo) => {
+          switch (kbInfo.type) {
+            case BABYLON.KeyboardEventTypes.KEYDOWN:
+              inputMap[kbInfo.event.key.toLowerCase()] = true;
+              break;
+            case BABYLON.KeyboardEventTypes.KEYUP:
+              inputMap[kbInfo.event.key.toLowerCase()] = false;
+              break;
+          }
+        });
+
+        // --- 5. LÓGICA DEL JUEGO ---
+
+        let tienePaquete = false;
+        const velocidad = 0.2;
+
+        scene.onBeforeRenderObservable.add(() => {
+          // A. Movimiento del Taxi (WASD)
+          if (inputMap["w"]) {
+            taxi.position.z -= velocidad;
+            taxi.rotation.y = BABYLON.Tools.ToRadians(180);
+          }
+          if (inputMap["s"]) {
+            taxi.position.z += velocidad;
+            taxi.rotation.y = BABYLON.Tools.ToRadians(0);
+          }
+          if (inputMap["a"]) {
+            taxi.position.x += velocidad;
+            taxi.rotation.y = BABYLON.Tools.ToRadians(-90);
+          }
+          if (inputMap["d"]) {
+            taxi.position.x -= velocidad;
+            taxi.rotation.y = BABYLON.Tools.ToRadians(90);
+          }
+
+          // B. Lógica de Recoger y Dejar (Espacio)
+          if (inputMap[" "]) {
+            // Barra espaciadora
+
+            // Calcular distancia (Requisito: Vector3.Distance)
+            // Nota: usamos positionAbsolute si el paquete ya es hijo, pero para simplificar usamos position
+            const distPaquete = BABYLON.Vector3.Distance(
+              taxi.position,
+              paquete.position
+            );
+            const distZona = BABYLON.Vector3.Distance(
+              taxi.position,
+              zonaEntrega.position
+            );
+
+            // RECOGER (Abducir)
+            if (!tienePaquete && distPaquete < 3) {
+              tienePaquete = true;
+
+              // Requisito: Parenting (Emparentamiento)
+              paquete.parent = taxi;
+
+              // Ajuste visual: lo ponemos debajo del taxi (levitación)
+              paquete.position = new BABYLON.Vector3(0, -1.5, 0);
+              console.log("¡Paquete Abducido!");
+            }
+
+            // DEJAR (Entregar)
+            else if (tienePaquete && distZona < 5) {
+              tienePaquete = false;
+
+              // Requisito: Romper parentesco
+              paquete.parent = null;
+
+              // Lo dejamos en el suelo de la zona
+              paquete.position = new BABYLON.Vector3(
+                zonaEntrega.position.x,
+                0.5,
+                zonaEntrega.position.z
+              );
+              console.log("¡Paquete Entregado!");
+            }
+          }
+        });
+
+        return scene;
+      };
+
+      createScene().then((scene) => {
+        engine.runRenderLoop(function () {
+          scene.render();
+        });
+      });
+
+      window.addEventListener("resize", function () {
+        engine.resize();
+      });
+    </script>
+  </body>
+</html>
+wwwwww
