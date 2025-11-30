@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <title>Examen: Taxi Nocturno con UI</title>
+    <title>Examen: Taxi Final con Colisiones</title>
     <style>
       html, body { overflow: hidden; width: 100%; height: 100%; margin: 0; padding: 0; }
       #renderCanvas { width: 100%; height: 100%; touch-action: none; }
@@ -21,15 +21,19 @@
         const scene = new BABYLON.Scene(engine);
 
         // =====================================================================
-        // --- 0. AMBIENTE NOCTURNO + NEBLINA ---
+        // --- 0. AMBIENTE ---
         // =====================================================================
+        
+        // >>> CAMBIO COLISIONES 1: Activar el sistema en la escena <<<
+        scene.collisionsEnabled = true; 
+        // -----------------------------------------------------------
+
         const colorNoche = new BABYLON.Color3(0.05, 0.05, 0.2);
         scene.clearColor = colorNoche;
         scene.fogMode = BABYLON.Scene.FOGMODE_EXP; 
         scene.fogColor = colorNoche; 
         scene.fogDensity = 0.02; 
 
-        // Luces
         const luzAmbiente = new BABYLON.HemisphericLight("luzAmbiente", new BABYLON.Vector3(0, 1, 0), scene);
         luzAmbiente.diffuse = new BABYLON.Color3(0.2, 0.2, 0.5); 
         luzAmbiente.groundColor = new BABYLON.Color3(0.1, 0.1, 0.1); 
@@ -42,58 +46,36 @@
         luna.intensity = 1.2; 
 
         // =====================================================================
-        // --- NUEVO: INTERFAZ DE USUARIO (GUI) ---
+        // --- MÚSICA DE FONDO (HTML5 AUDIO) ---
         // =====================================================================
-        
-        // 1. Creamos el lienzo de la interfaz sobre el juego
-        const advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
+        const musicaHTML = new Audio('./sounds/musica.mp3');
+        musicaHTML.loop = true;   
+        musicaHTML.volume = 0.03;  
 
-        // 2. Creamos un contenedor (Caja semitransparente)
-        const contenedorInstrucciones = new BABYLON.GUI.Rectangle();
-        contenedorInstrucciones.width = "320px";
-        contenedorInstrucciones.height = "160px";
-        contenedorInstrucciones.cornerRadius = 10;
-        contenedorInstrucciones.color = "cyan"; // Borde neón
-        contenedorInstrucciones.thickness = 2;
-        contenedorInstrucciones.background = "rgba(0, 0, 0, 0.7)"; // Fondo oscuro transparente
+        const promesaPlay = musicaHTML.play();
+        if (promesaPlay !== undefined) {
+            promesaPlay.catch(error => {
+                console.log("⚠️ Autoplay bloqueado. Esperando interacción...");
+                const desbloquearAudio = () => {
+                    musicaHTML.play();
+                    window.removeEventListener("click", desbloquearAudio);
+                    window.removeEventListener("keydown", desbloquearAudio);
+                };
+                window.addEventListener("click", desbloquearAudio);
+                window.addEventListener("keydown", desbloquearAudio);
+            });
+        }
         
-        // Posicionamos el contenedor arriba a la izquierda
-        contenedorInstrucciones.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-        contenedorInstrucciones.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
-        contenedorInstrucciones.left = "20px";
-        contenedorInstrucciones.top = "20px";
-        
-        // Agregamos el contenedor a la pantalla
-        advancedTexture.addControl(contenedorInstrucciones);
-
-        // 3. Agregamos el texto dentro de la caja
-        const textoInstrucciones = new BABYLON.GUI.TextBlock();
-        textoInstrucciones.text = "🚕 CONTROLES TAXI\n\n" +
-                                  "W, A, S, D : Moverse\n" +
-                                  "🖱️ MOUSE : Girar Cámara\n" +
-                                  "␣ ESPACIO : Recoger / Entregar\n\n" +
-                                  "🎯 Misión: Lleva al pasajero a su color.";
-        textoInstrucciones.color = "white";
-        textoInstrucciones.fontSize = 16;
-        textoInstrucciones.textHorizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-        textoInstrucciones.paddingLeft = "10px"; // Margen interno
-        
-        contenedorInstrucciones.addControl(textoInstrucciones); 
-
         // =====================================================================
-
-        const highlightLayer = new BABYLON.HighlightLayer("hl1", scene);
-        highlightLayer.blurHorizontalSize = 1;
-        highlightLayer.blurVerticalSize = 1;
-
-        // --- CONFIGURACIÓN ---
+        // --- CONFIGURACIÓN DE JUEGO ---
+        // =====================================================================
         let configPasajeros = [
             {
                 id: 0,
                 archivoModelo: "persona_A.glb", 
                 posicionInicial: new BABYLON.Vector3(10, 0.5, -6),
                 posicionDestino: new BABYLON.Vector3(9,5, -100),
-                colorZona: new BABYLON.Color3(0, 0.5, 1), // AZUL
+                colorZona: new BABYLON.Color3(0, 0.5, 1), 
                 rotacionInicial: -90,
                 mesh: null, zonaMesh: null, entregado: false
             },
@@ -102,11 +84,63 @@
                 archivoModelo: "persona_B.glb",
                 posicionInicial: new BABYLON.Vector3(-10, 0.5, -132),
                 posicionDestino: new BABYLON.Vector3(-9,5,-69.5),
-                colorZona: new BABYLON.Color3(1, 0, 0), // ROJO
+                colorZona: new BABYLON.Color3(1, 0, 0), 
                 rotacionInicial: 90,
                 mesh: null, zonaMesh: null, entregado: false
             }
         ];
+
+        let contadorEntregas = 0;
+        const totalPasajeros = configPasajeros.length;
+        let juegoTerminado = false; 
+
+        // =====================================================================
+        // --- INTERFAZ (GUI) ---
+        // =====================================================================
+        const advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
+
+        // Paneles (Instrucciones, Contador, Victoria)
+        const panelInstrucciones = new BABYLON.GUI.Rectangle();
+        panelInstrucciones.width = "300px"; panelInstrucciones.height = "140px";
+        panelInstrucciones.cornerRadius = 10; panelInstrucciones.color = "cyan";
+        panelInstrucciones.thickness = 2; panelInstrucciones.background = "rgba(0, 0, 0, 0.7)";
+        panelInstrucciones.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+        panelInstrucciones.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
+        panelInstrucciones.left = "20px"; panelInstrucciones.top = "20px";
+        advancedTexture.addControl(panelInstrucciones);
+
+        const textoInstrucciones = new BABYLON.GUI.TextBlock();
+        textoInstrucciones.text = "🚕 CONTROLES\n\nW,A,S,D: Moverse\nEspacio: Acción\nMouse: Cámara";
+        textoInstrucciones.color = "white"; textoInstrucciones.fontSize = 18;
+        panelInstrucciones.addControl(textoInstrucciones); 
+
+        const panelContador = new BABYLON.GUI.Rectangle();
+        panelContador.width = "250px"; panelContador.height = "80px";
+        panelContador.cornerRadius = 10; panelContador.color = "yellow"; 
+        panelContador.thickness = 2; panelContador.background = "rgba(0, 0, 0, 0.7)";
+        panelContador.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT; 
+        panelContador.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
+        panelContador.left = "-20px"; panelContador.top = "20px";
+        advancedTexture.addControl(panelContador);
+
+        const textoContador = new BABYLON.GUI.TextBlock();
+        textoContador.text = `PASAJEROS\n${contadorEntregas} / ${totalPasajeros}`;
+        textoContador.color = "yellow"; textoContador.fontSize = 24; textoContador.fontWeight = "bold";
+        panelContador.addControl(textoContador);
+
+        const pantallaVictoria = new BABYLON.GUI.Rectangle();
+        pantallaVictoria.width = 1; pantallaVictoria.height = 1; 
+        pantallaVictoria.background = "rgba(0, 0, 0, 0.85)"; pantallaVictoria.isVisible = false; 
+        pantallaVictoria.zIndex = 10; 
+        advancedTexture.addControl(pantallaVictoria);
+
+        const textoVictoria = new BABYLON.GUI.TextBlock();
+        textoVictoria.text = "🏆 ¡MISIÓN COMPLETADA! 🏆\n\nPresiona 'R' para reiniciar";
+        textoVictoria.color = "#00ff00"; textoVictoria.fontSize = 48; textoVictoria.fontWeight = "bold";
+        pantallaVictoria.addControl(textoVictoria);
+
+        const highlightLayer = new BABYLON.HighlightLayer("hl1", scene);
+        highlightLayer.blurHorizontalSize = 1; highlightLayer.blurVerticalSize = 1;
 
         // --- CÁMARA ---
         const camera = new BABYLON.FreeCamera("camera1", new BABYLON.Vector3(0, 5, -10), scene);
@@ -115,15 +149,29 @@
         camera.inputs.remove(camera.inputs.attached.keyboard);
         camera.angularSensibility = 2000;
 
-        // --- MODELOS BASE ---
-        await BABYLON.SceneLoader.ImportMeshAsync("", "./models/", "vecindario.glb", scene);
+        // --- MODELOS ---
+
+        // >>> CAMBIO COLISIONES 2: SOLIDIFICAR EL VECINDARIO <<<
+        const importVecindario = await BABYLON.SceneLoader.ImportMeshAsync("", "./models/", "vecindario.glb", scene);
+        // Recorremos todas las partes del vecindario y las hacemos sólidas
+        importVecindario.meshes.forEach(mesh => {
+            mesh.checkCollisions = true; 
+        });
+        // -----------------------------------------------------
 
         const importTaxi = await BABYLON.SceneLoader.ImportMeshAsync("", "./models/", "taxi.glb", scene);
         const taxi = importTaxi.meshes[0];
         taxi.rotationQuaternion = null;
         taxi.rotation.y = BABYLON.Tools.ToRadians(180);
-        taxi.position = new BABYLON.Vector3(0,4.5, 0);
+        taxi.position = new BABYLON.Vector3(0, 4.5, 0);
         taxi.scaling = new BABYLON.Vector3(1, 1, 1);
+        
+        // >>> CAMBIO COLISIONES 3: CONFIGURAR EL TAXI <<<
+        taxi.checkCollisions = true;
+        // Definimos el tamaño del "cuerpo" del taxi (Ancho, Alto, Largo)
+        taxi.ellipsoid = new BABYLON.Vector3(1.5, 1.0, 3.0); 
+        // -----------------------------------------------
+
         camera.parent = taxi;
 
         // --- HAZ DE LUZ ---
@@ -144,7 +192,6 @@
             let pData = configPasajeros[i];
             try {
                 const importResult = await BABYLON.SceneLoader.ImportMeshAsync("", "./models/", pData.archivoModelo, scene);
-                
                 pData.mesh = importResult.meshes[0];
                 pData.mesh.scaling = new BABYLON.Vector3(0.75, 0.75, 0.75);
                 pData.mesh.position = pData.posicionInicial;
@@ -186,34 +233,70 @@
         let inputMap = {};
         scene.onKeyboardObservable.add((kbInfo) => {
           switch (kbInfo.type) {
-            case BABYLON.KeyboardEventTypes.KEYDOWN: inputMap[kbInfo.event.key.toLowerCase()] = true; break;
-            case BABYLON.KeyboardEventTypes.KEYUP: inputMap[kbInfo.event.key.toLowerCase()] = false; break;
+            case BABYLON.KeyboardEventTypes.KEYDOWN: 
+                if (juegoTerminado && kbInfo.event.key.toLowerCase() === 'r') {
+                    location.reload(); 
+                }
+                inputMap[kbInfo.event.key.toLowerCase()] = true; 
+                break;
+            case BABYLON.KeyboardEventTypes.KEYUP: 
+                inputMap[kbInfo.event.key.toLowerCase()] = false; 
+                break;
           }
         });
 
         // --- LÓGICA DEL JUEGO ---
         let pasajeroActualIdx = null; 
-        const velocidad = 0.2;
+        const velocidad = 0.3; // Aumenté un poco la velocidad
 
         scene.onBeforeRenderObservable.add(() => {
+                if (juegoTerminado) return; 
+
+                // GIRO CON MOUSE (Igual que antes)
                 if (camera.rotation.y !== 0) {
                     taxi.rotation.y += camera.rotation.y;
                     camera.rotation.y = 0; 
                 }
-                if (inputMap["w"]) taxi.translate(BABYLON.Axis.Z, velocidad, BABYLON.Space.LOCAL);
-                if (inputMap["s"]) taxi.translate(BABYLON.Axis.Z, -velocidad, BABYLON.Space.LOCAL);
-                if (inputMap["a"]) taxi.translate(BABYLON.Axis.X, -velocidad, BABYLON.Space.LOCAL);
-                if (inputMap["d"]) taxi.translate(BABYLON.Axis.X, velocidad, BABYLON.Space.LOCAL);
 
+                // >>> CAMBIO COLISIONES 4: MOVIMIENTO FÍSICO (MoveWithCollisions) <<<
+                // Ya no usamos 'translate' porque eso es teletransportación e ignora paredes.
+                // Usamos moveWithCollisions que respeta sólidos.
+                
+                let movimientoVector = new BABYLON.Vector3(0, 0, 0);
+
+                if (inputMap["w"]) {
+                    // Obtener la dirección "Adelante" del taxi y multiplicarla por la velocidad
+                    let forward = taxi.getDirection(BABYLON.Axis.Z).scale(velocidad);
+                    movimientoVector = movimientoVector.add(forward);
+                }
+                if (inputMap["s"]) {
+                    let backward = taxi.getDirection(BABYLON.Axis.Z).scale(-velocidad);
+                    movimientoVector = movimientoVector.add(backward);
+                }
+                if (inputMap["a"]) {
+                    let left = taxi.getDirection(BABYLON.Axis.X).scale(-velocidad);
+                    movimientoVector = movimientoVector.add(left);
+                }
+                if (inputMap["d"]) {
+                    let right = taxi.getDirection(BABYLON.Axis.X).scale(velocidad);
+                    movimientoVector = movimientoVector.add(right);
+                }
+
+                // APLICAR MOVIMIENTO CON COLISIONES
+                if (movimientoVector.length() > 0) {
+                    taxi.moveWithCollisions(movimientoVector);
+                }
+                // ------------------------------------------------------------------
+
+                // LOGICA DE RECOGER / ENTREGAR (Igual que antes)
                 if (inputMap[" "]) { 
                     if (pasajeroActualIdx === null) {
-                        // Recoger
                         for (let i = 0; i < configPasajeros.length; i++) {
                             let pData = configPasajeros[i];
                             if(pData.entregado || !pData.mesh) continue;
                             let dist = BABYLON.Vector3.Distance(taxi.position, pData.mesh.position);
 
-                            if (dist < 5) {
+                            if (dist < 8) {
                                 pasajeroActualIdx = i;
                                 pData.mesh.parent = taxi;
                                 pData.mesh.position = new BABYLON.Vector3(0, -4, 0);
@@ -222,7 +305,6 @@
                             }
                         }
                     } else {
-                        // Entregar
                         let pDataActual = configPasajeros[pasajeroActualIdx];
                         let distZona = BABYLON.Vector3.Distance(taxi.position, pDataActual.zonaMesh.position);
 
@@ -239,6 +321,18 @@
                             
                             pDataActual.zonaMesh.material.emissiveColor = new BABYLON.Color3(0, 0, 0); 
                             pDataActual.zonaMesh.material.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+
+                            contadorEntregas++; 
+                            textoContador.text = `PASAJEROS\n${contadorEntregas} / ${totalPasajeros}`;
+                            
+                            if (contadorEntregas === totalPasajeros) {
+                                juegoTerminado = true; 
+                                pantallaVictoria.isVisible = true; 
+                                panelInstrucciones.isVisible = false;
+                                panelContador.isVisible = false;
+                                musicaHTML.pause(); 
+                                musicaHTML.currentTime = 0; 
+                            }
                         }
                     }
                 }
