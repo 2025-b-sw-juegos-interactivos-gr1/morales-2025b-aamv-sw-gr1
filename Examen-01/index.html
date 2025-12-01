@@ -34,7 +34,7 @@
         scene.fogColor = colorNoche; 
         scene.fogDensity = 0.02; 
 
-        // Iluminación (Luna y Ambiente)
+        // Iluminación 
         const luzAmbiente = new BABYLON.HemisphericLight("luzAmbiente", new BABYLON.Vector3(0, 1, 0), scene);
         luzAmbiente.diffuse = new BABYLON.Color3(0.2, 0.2, 0.5); 
         luzAmbiente.intensity = 0.4; 
@@ -66,7 +66,7 @@
         }
         
         // =========================================================
-        // 3. BASE DE DATOS DE PASAJEROS (CONFIGURACIÓN)
+        // 3. BASE DE DATOS DE PASAJEROS
         // =========================================================
         let configPasajeros = [
             {
@@ -95,7 +95,7 @@
         let juegoTerminado = false; 
 
         // =========================================================
-        // 4. INTERFAZ DE USUARIO (GUI)
+        // 4. INTERFAZ DE USUARIO 
         // =========================================================
         const advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
 
@@ -159,7 +159,7 @@
         // A. Cargar Vecindario y hacerlo Sólido
         const importVecindario = await BABYLON.SceneLoader.ImportMeshAsync("", "./models/", "vecindario.glb", scene);
         importVecindario.meshes.forEach(mesh => {
-            mesh.checkCollisions = true; // El taxi chocará contra esto
+            mesh.checkCollisions = true; 
         });
 
         // B. Cargar Taxi y definir su Cuerpo Físico
@@ -172,7 +172,7 @@
         
         // Configuración de Colisión del Taxi
         taxi.checkCollisions = true;
-        taxi.ellipsoid = new BABYLON.Vector3(1.5, 1.0, 3.0); // Tamaño del colisionador
+        taxi.ellipsoid = new BABYLON.Vector3(1.5, 1.0, 3.0); 
 
         camera.parent = taxi;
 
@@ -189,7 +189,7 @@
         hazLuz.position = new BABYLON.Vector3(0, -3, 0);
         hazLuz.isVisible = false;
 
-        // D. Cargar Pasajeros (Bucle Dinámico)
+        // D. Cargar Pasajeros 
         for (let i = 0; i < configPasajeros.length; i++) {
             let pData = configPasajeros[i];
             try {
@@ -212,7 +212,7 @@
                 continue;
             }
 
-            // Crear Zona de Entrega (Cilindro Holográfico)
+            // Crear Zona de Entrega 
             const nuevaZona = BABYLON.MeshBuilder.CreateCylinder("zona_" + i, { diameter: 5, height: 10 }, scene);
             nuevaZona.position = pData.posicionDestino;
             const matZona = new BABYLON.StandardMaterial("matZona_" + i, scene);
@@ -223,7 +223,7 @@
             pData.zonaMesh = nuevaZona;   
         }
 
-        // Animación de Zonas (Respiración)
+        // Animación de Zonas
         scene.registerBeforeRender(() => {
              const alphaValue = 0.3 + Math.sin(Date.now() / 500) * 0.1;
              configPasajeros.forEach(pData => {
@@ -235,7 +235,7 @@
         });
 
         // =========================================================
-        // 6. CONTROL DE INPUTS (TECLADO)
+        // 6. CONTROL DE INPUTS 
         // =========================================================
         let inputMap = {};
         scene.onKeyboardObservable.add((kbInfo) => {
@@ -305,7 +305,7 @@
                             let dist = BABYLON.Vector3.Distance(taxi.position, pData.mesh.position);
                             if (dist < 8) {
                                 pasajeroActualIdx = i;
-                                pData.mesh.parent = taxi; // Parenting (Abducción)
+                                pData.mesh.parent = taxi; // Parenting 
                                 pData.mesh.position = new BABYLON.Vector3(0, -4, 0);
                                 hazLuz.isVisible = true;
                                 break; 
