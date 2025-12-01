@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="UTF-8" />
-    <title>Examen: Taxi Final con Colisiones</title>
+    <title>Examen 1B: Taxi Clásico</title>
     <style>
       html, body { overflow: hidden; width: 100%; height: 100%; margin: 0; padding: 0; }
       #renderCanvas { width: 100%; height: 100%; touch-action: none; }
@@ -20,42 +20,41 @@
       const createScene = async function () {
         const scene = new BABYLON.Scene(engine);
 
-        // =====================================================================
-        // --- 0. AMBIENTE ---
-        // =====================================================================
+        // =========================================================
+        // 1. CONFIGURACIÓN DEL ENTORNO Y FISICAS
+        // =========================================================
         
-        // >>> CAMBIO COLISIONES 1: Activar el sistema en la escena <<<
+        // ACTIVAMOS LAS COLISIONES EN EL MUNDO
         scene.collisionsEnabled = true; 
-        // -----------------------------------------------------------
 
+        // Configuración de Noche y Neblina
         const colorNoche = new BABYLON.Color3(0.05, 0.05, 0.2);
         scene.clearColor = colorNoche;
         scene.fogMode = BABYLON.Scene.FOGMODE_EXP; 
         scene.fogColor = colorNoche; 
         scene.fogDensity = 0.02; 
 
+        // Iluminación (Luna y Ambiente)
         const luzAmbiente = new BABYLON.HemisphericLight("luzAmbiente", new BABYLON.Vector3(0, 1, 0), scene);
         luzAmbiente.diffuse = new BABYLON.Color3(0.2, 0.2, 0.5); 
-        luzAmbiente.groundColor = new BABYLON.Color3(0.1, 0.1, 0.1); 
         luzAmbiente.intensity = 0.4; 
 
         const luna = new BABYLON.DirectionalLight("luna", new BABYLON.Vector3(-1, -2, -1), scene);
         luna.position = new BABYLON.Vector3(20, 40, 20);
-        luna.diffuse = new BABYLON.Color3(0.8, 0.9, 1); 
-        luna.specular = new BABYLON.Color3(0.5, 0.5, 0.5); 
         luna.intensity = 1.2; 
 
-        // =====================================================================
-        // --- MÚSICA DE FONDO (HTML5 AUDIO) ---
-        // =====================================================================
+        // =========================================================
+        // 2. SISTEMA DE AUDIO (HTML5)
+        // =========================================================
         const musicaHTML = new Audio('./sounds/musica.mp3');
         musicaHTML.loop = true;   
-        musicaHTML.volume = 0.03;  
+        musicaHTML.volume = 0.5;  
 
+        // Manejo de bloqueo de Autoplay del navegador
         const promesaPlay = musicaHTML.play();
         if (promesaPlay !== undefined) {
             promesaPlay.catch(error => {
-                console.log("⚠️ Autoplay bloqueado. Esperando interacción...");
+                console.log("Esperando interacción para audio...");
                 const desbloquearAudio = () => {
                     musicaHTML.play();
                     window.removeEventListener("click", desbloquearAudio);
@@ -66,16 +65,16 @@
             });
         }
         
-        // =====================================================================
-        // --- CONFIGURACIÓN DE JUEGO ---
-        // =====================================================================
+        // =========================================================
+        // 3. BASE DE DATOS DE PASAJEROS (CONFIGURACIÓN)
+        // =========================================================
         let configPasajeros = [
             {
                 id: 0,
                 archivoModelo: "persona_A.glb", 
                 posicionInicial: new BABYLON.Vector3(10, 0.5, -6),
                 posicionDestino: new BABYLON.Vector3(9,5, -100),
-                colorZona: new BABYLON.Color3(0, 0.5, 1), 
+                colorZona: new BABYLON.Color3(0, 0.5, 1), // AZUL
                 rotacionInicial: -90,
                 mesh: null, zonaMesh: null, entregado: false
             },
@@ -84,22 +83,23 @@
                 archivoModelo: "persona_B.glb",
                 posicionInicial: new BABYLON.Vector3(-10, 0.5, -132),
                 posicionDestino: new BABYLON.Vector3(-9,5,-69.5),
-                colorZona: new BABYLON.Color3(1, 0, 0), 
+                colorZona: new BABYLON.Color3(1, 0, 0), // ROJO
                 rotacionInicial: 90,
                 mesh: null, zonaMesh: null, entregado: false
             }
         ];
 
+        // Variables de Estado del Juego
         let contadorEntregas = 0;
         const totalPasajeros = configPasajeros.length;
         let juegoTerminado = false; 
 
-        // =====================================================================
-        // --- INTERFAZ (GUI) ---
-        // =====================================================================
+        // =========================================================
+        // 4. INTERFAZ DE USUARIO (GUI)
+        // =========================================================
         const advancedTexture = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI");
 
-        // Paneles (Instrucciones, Contador, Victoria)
+        // Panel A: Instrucciones
         const panelInstrucciones = new BABYLON.GUI.Rectangle();
         panelInstrucciones.width = "300px"; panelInstrucciones.height = "140px";
         panelInstrucciones.cornerRadius = 10; panelInstrucciones.color = "cyan";
@@ -114,6 +114,7 @@
         textoInstrucciones.color = "white"; textoInstrucciones.fontSize = 18;
         panelInstrucciones.addControl(textoInstrucciones); 
 
+        // Panel B: Contador de Pasajeros
         const panelContador = new BABYLON.GUI.Rectangle();
         panelContador.width = "250px"; panelContador.height = "80px";
         panelContador.cornerRadius = 10; panelContador.color = "yellow"; 
@@ -128,6 +129,7 @@
         textoContador.color = "yellow"; textoContador.fontSize = 24; textoContador.fontWeight = "bold";
         panelContador.addControl(textoContador);
 
+        // Panel C: Pantalla de Victoria (Oculta)
         const pantallaVictoria = new BABYLON.GUI.Rectangle();
         pantallaVictoria.width = 1; pantallaVictoria.height = 1; 
         pantallaVictoria.background = "rgba(0, 0, 0, 0.85)"; pantallaVictoria.isVisible = false; 
@@ -139,26 +141,28 @@
         textoVictoria.color = "#00ff00"; textoVictoria.fontSize = 48; textoVictoria.fontWeight = "bold";
         pantallaVictoria.addControl(textoVictoria);
 
+        // Capa de Resaltado (Glow Effect)
         const highlightLayer = new BABYLON.HighlightLayer("hl1", scene);
         highlightLayer.blurHorizontalSize = 1; highlightLayer.blurVerticalSize = 1;
 
-        // --- CÁMARA ---
+        // Cámara de Seguimiento
         const camera = new BABYLON.FreeCamera("camera1", new BABYLON.Vector3(0, 5, -10), scene);
         camera.setTarget(BABYLON.Vector3.Zero());
         camera.attachControl(canvas, true);
         camera.inputs.remove(camera.inputs.attached.keyboard);
         camera.angularSensibility = 2000;
 
-        // --- MODELOS ---
+        // =========================================================
+        // 5. CARGA DE MODELOS Y COLISIONES
+        // =========================================================
 
-        // >>> CAMBIO COLISIONES 2: SOLIDIFICAR EL VECINDARIO <<<
+        // A. Cargar Vecindario y hacerlo Sólido
         const importVecindario = await BABYLON.SceneLoader.ImportMeshAsync("", "./models/", "vecindario.glb", scene);
-        // Recorremos todas las partes del vecindario y las hacemos sólidas
         importVecindario.meshes.forEach(mesh => {
-            mesh.checkCollisions = true; 
+            mesh.checkCollisions = true; // El taxi chocará contra esto
         });
-        // -----------------------------------------------------
 
+        // B. Cargar Taxi y definir su Cuerpo Físico
         const importTaxi = await BABYLON.SceneLoader.ImportMeshAsync("", "./models/", "taxi.glb", scene);
         const taxi = importTaxi.meshes[0];
         taxi.rotationQuaternion = null;
@@ -166,15 +170,13 @@
         taxi.position = new BABYLON.Vector3(0, 4.5, 0);
         taxi.scaling = new BABYLON.Vector3(1, 1, 1);
         
-        // >>> CAMBIO COLISIONES 3: CONFIGURAR EL TAXI <<<
+        // Configuración de Colisión del Taxi
         taxi.checkCollisions = true;
-        // Definimos el tamaño del "cuerpo" del taxi (Ancho, Alto, Largo)
-        taxi.ellipsoid = new BABYLON.Vector3(1.5, 1.0, 3.0); 
-        // -----------------------------------------------
+        taxi.ellipsoid = new BABYLON.Vector3(1.5, 1.0, 3.0); // Tamaño del colisionador
 
         camera.parent = taxi;
 
-        // --- HAZ DE LUZ ---
+        // C. Efecto de Haz de Luz
         const hazLuz = BABYLON.MeshBuilder.CreateCylinder("hazLuz", {
             height: 5, diameterTop: 0.5, diameterBottom: 10, tessellation: 16
         }, scene);
@@ -187,10 +189,11 @@
         hazLuz.position = new BABYLON.Vector3(0, -3, 0);
         hazLuz.isVisible = false;
 
-        // --- CARGA DE PASAJEROS ---
+        // D. Cargar Pasajeros (Bucle Dinámico)
         for (let i = 0; i < configPasajeros.length; i++) {
             let pData = configPasajeros[i];
             try {
+                // Carga del modelo 3D
                 const importResult = await BABYLON.SceneLoader.ImportMeshAsync("", "./models/", pData.archivoModelo, scene);
                 pData.mesh = importResult.meshes[0];
                 pData.mesh.scaling = new BABYLON.Vector3(0.75, 0.75, 0.75);
@@ -198,16 +201,18 @@
                 pData.mesh.rotationQuaternion = null;
                 pData.mesh.rotation.y = BABYLON.Tools.ToRadians(pData.rotacionInicial);
                 
+                // Aplicar brillo al contorno
                 importResult.meshes.forEach(meshPart => {
                     if (meshPart.name !== "__root__") {
                         highlightLayer.addMesh(meshPart, pData.colorZona);
                     }
                 });
             } catch (error) {
-                console.error("Error cargando: " + pData.archivoModelo);
+                console.error("Error cargando modelo");
                 continue;
             }
 
+            // Crear Zona de Entrega (Cilindro Holográfico)
             const nuevaZona = BABYLON.MeshBuilder.CreateCylinder("zona_" + i, { diameter: 5, height: 10 }, scene);
             nuevaZona.position = pData.posicionDestino;
             const matZona = new BABYLON.StandardMaterial("matZona_" + i, scene);
@@ -218,7 +223,7 @@
             pData.zonaMesh = nuevaZona;   
         }
 
-        // --- ANIMACIÓN ---
+        // Animación de Zonas (Respiración)
         scene.registerBeforeRender(() => {
              const alphaValue = 0.3 + Math.sin(Date.now() / 500) * 0.1;
              configPasajeros.forEach(pData => {
@@ -229,11 +234,14 @@
              });
         });
 
-        // --- INPUT ---
+        // =========================================================
+        // 6. CONTROL DE INPUTS (TECLADO)
+        // =========================================================
         let inputMap = {};
         scene.onKeyboardObservable.add((kbInfo) => {
           switch (kbInfo.type) {
             case BABYLON.KeyboardEventTypes.KEYDOWN: 
+                // Reinicio con tecla 'R'
                 if (juegoTerminado && kbInfo.event.key.toLowerCase() === 'r') {
                     location.reload(); 
                 }
@@ -245,27 +253,25 @@
           }
         });
 
-        // --- LÓGICA DEL JUEGO ---
+        // =========================================================
+        // 7. LÓGICA DEL BUCLE DE JUEGO
+        // =========================================================
         let pasajeroActualIdx = null; 
-        const velocidad = 0.3; // Aumenté un poco la velocidad
+        const velocidad = 0.3; 
 
         scene.onBeforeRenderObservable.add(() => {
-                if (juegoTerminado) return; 
+                if (juegoTerminado) return; // Pausar si ganó
 
-                // GIRO CON MOUSE (Igual que antes)
+                // Sincronizar giro de cámara con Taxi
                 if (camera.rotation.y !== 0) {
                     taxi.rotation.y += camera.rotation.y;
                     camera.rotation.y = 0; 
                 }
 
-                // >>> CAMBIO COLISIONES 4: MOVIMIENTO FÍSICO (MoveWithCollisions) <<<
-                // Ya no usamos 'translate' porque eso es teletransportación e ignora paredes.
-                // Usamos moveWithCollisions que respeta sólidos.
-                
+                // CALCULO DE MOVIMIENTO CON FÍSICAS
                 let movimientoVector = new BABYLON.Vector3(0, 0, 0);
 
                 if (inputMap["w"]) {
-                    // Obtener la dirección "Adelante" del taxi y multiplicarla por la velocidad
                     let forward = taxi.getDirection(BABYLON.Axis.Z).scale(velocidad);
                     movimientoVector = movimientoVector.add(forward);
                 }
@@ -282,49 +288,54 @@
                     movimientoVector = movimientoVector.add(right);
                 }
 
-                // APLICAR MOVIMIENTO CON COLISIONES
+                // APLICAR MOVIMIENTO (Respetando paredes)
                 if (movimientoVector.length() > 0) {
                     taxi.moveWithCollisions(movimientoVector);
                 }
-                // ------------------------------------------------------------------
 
-                // LOGICA DE RECOGER / ENTREGAR (Igual que antes)
+                // LÓGICA DE INTERACCIÓN (Barra Espaciadora)
                 if (inputMap[" "]) { 
                     if (pasajeroActualIdx === null) {
+                        // --- INTENTAR RECOGER ---
                         for (let i = 0; i < configPasajeros.length; i++) {
                             let pData = configPasajeros[i];
                             if(pData.entregado || !pData.mesh) continue;
+                            
+                            // Verificar distancia
                             let dist = BABYLON.Vector3.Distance(taxi.position, pData.mesh.position);
-
                             if (dist < 8) {
                                 pasajeroActualIdx = i;
-                                pData.mesh.parent = taxi;
+                                pData.mesh.parent = taxi; // Parenting (Abducción)
                                 pData.mesh.position = new BABYLON.Vector3(0, -4, 0);
                                 hazLuz.isVisible = true;
                                 break; 
                             }
                         }
                     } else {
+                        // --- INTENTAR ENTREGAR ---
                         let pDataActual = configPasajeros[pasajeroActualIdx];
                         let distZona = BABYLON.Vector3.Distance(taxi.position, pDataActual.zonaMesh.position);
 
                         if (distZona < 6) {
+                            // Soltar pasajero
                             pDataActual.mesh.parent = null;
                             pDataActual.mesh.position = new BABYLON.Vector3(taxi.position.x, 0.5, taxi.position.z);
                             pDataActual.entregado = true;
                             pasajeroActualIdx = null;
                             hazLuz.isVisible = false;
                             
+                            // Quitar efectos visuales
                             pDataActual.mesh.getChildMeshes().forEach(part => {
                                 highlightLayer.removeMesh(part);
                             });
-                            
                             pDataActual.zonaMesh.material.emissiveColor = new BABYLON.Color3(0, 0, 0); 
                             pDataActual.zonaMesh.material.diffuseColor = new BABYLON.Color3(0.1, 0.1, 0.1);
 
+                            // Actualizar Puntuación
                             contadorEntregas++; 
                             textoContador.text = `PASAJEROS\n${contadorEntregas} / ${totalPasajeros}`;
                             
+                            // VERIFICAR VICTORIA
                             if (contadorEntregas === totalPasajeros) {
                                 juegoTerminado = true; 
                                 pantallaVictoria.isVisible = true; 
